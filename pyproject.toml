@@ -7,7 +7,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     # Must match the SageMaker scikit-learn container (SKLEARN_CONTAINER_VERSION in config.py).
     # A mismatch here is the classic "works locally, 500s on the endpoint" bug.
-    "scikit-learn>=1.9,<1.10",
+    "scikit-learn==1.9.0",
     "pandas>=2.2",
     "joblib>=1.4",
     "boto3>=1.40",

@@ -63,9 +63,12 @@ def test_serving_features_match_training_features() -> None:
 
 
 def test_sklearn_version_check() -> None:
-    check_sklearn_matches_container("1.9.1", "1.9-0")
+    check_sklearn_matches_container("1.9.0", "1.9.0")
+    # A patch-level mismatch must fail too: it caused InconsistentVersionWarning on the endpoint.
     with pytest.raises(RuntimeError, match="does not match"):
-        check_sklearn_matches_container("1.8.0", "1.9-0")
+        check_sklearn_matches_container("1.9.1", "1.9.0")
+    with pytest.raises(RuntimeError, match="does not match"):
+        check_sklearn_matches_container("1.8.0", "1.9.0")
 
 
 def test_handlers_end_to_end(

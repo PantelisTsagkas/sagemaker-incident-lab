@@ -15,19 +15,21 @@ from incident_lab.config import (
     MODEL_FILE,
     RAW_KOI_FILE,
     REFERENCE_FILE,
-    SKLEARN_CONTAINER_VERSION,
+    SKLEARN_SERVING_VERSION,
 )
 from incident_lab.data import download_koi, prepare
 
 
-def check_sklearn_matches_container(local_version: str, container_version: str) -> None:
-    """Fail fast if the local sklearn minor version differs from the serving container's."""
-    local_minor = ".".join(local_version.split(".")[:2])
-    container_minor = container_version.split("-")[0]
-    if local_minor != container_minor:
+def check_sklearn_matches_container(local_version: str, serving_version: str) -> None:
+    """Fail fast unless local sklearn is exactly the version inside the serving container.
+
+    Patch level matters: training on 1.9.1 and serving on 1.9.0 logs
+    InconsistentVersionWarning on every model load.
+    """
+    if local_version != serving_version:
         raise RuntimeError(
             f"Local scikit-learn {local_version} does not match container "
-            f"{container_version}. Align pyproject.toml and SKLEARN_CONTAINER_VERSION."
+            f"{serving_version}. Align pyproject.toml and SKLEARN_SERVING_VERSION."
         )
 
 
@@ -56,7 +58,7 @@ def train_model(
 
 
 def main() -> None:
-    check_sklearn_matches_container(sklearn.__version__, SKLEARN_CONTAINER_VERSION)
+    check_sklearn_matches_container(sklearn.__version__, SKLEARN_SERVING_VERSION)
 
     raw = pd.read_csv(download_koi(RAW_KOI_FILE))
     features, labels = prepare(raw)

@@ -9,6 +9,10 @@ PROJECT = "incident-lab"
 # Must match scikit-learn in pyproject.toml. A version mismatch between the
 # training machine and the serving container is the classic deploy bug.
 SKLEARN_CONTAINER_VERSION = "1.9-0"
+# The tag's "-0" is AWS's container build number, not the sklearn patch, so the exact
+# version inside the image was read from InconsistentVersionWarning in the endpoint
+# logs on 2026-10-02. Keep pyproject.toml pinned to exactly this.
+SKLEARN_SERVING_VERSION = "1.9.0"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data"
