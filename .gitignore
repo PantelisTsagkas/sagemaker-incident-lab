@@ -10,3 +10,4 @@ artifacts/
 infra/.terraform/
 *.tfstate
 *.tfstate.*
+tfplan
