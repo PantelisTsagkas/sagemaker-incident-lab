@@ -1,0 +1,38 @@
+[project]
+name = "incident-lab"
+version = "0.1.0"
+description = "Break a SageMaker endpoint on purpose, diagnose it, write the postmortem."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # Must match the SageMaker scikit-learn container (SKLEARN_CONTAINER_VERSION in config.py).
+    # A mismatch here is the classic "works locally, 500s on the endpoint" bug.
+    "scikit-learn>=1.9,<1.10",
+    "pandas>=2.2",
+    "joblib>=1.4",
+    "boto3>=1.40",
+    # The light V3 package: Model / EndpointConfig / Endpoint resources and image URIs.
+    # The full `sagemaker` meta-package also works but pulls in torch (~6 GB venv vs ~350 MB).
+    "sagemaker-core>=2.23",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/incident_lab"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# sagemaker-core docstrings emit harmless SyntaxWarnings on import
+filterwarnings = ["ignore::SyntaxWarning"]
+
+[tool.ruff]
+line-length = 100
