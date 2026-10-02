@@ -6,3 +6,7 @@ data/
 artifacts/
 *.tar.gz
 .env
+
+infra/.terraform/
+*.tfstate
+*.tfstate.*
