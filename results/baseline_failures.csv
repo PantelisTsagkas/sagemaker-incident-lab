@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+sagemaker,invoke_endpoint,"ConnectionClosedError('Connection was closed before we received a valid response from endpoint URL: ""https://runtime.sagemaker.eu-west-2.amazonaws.com/endpoints/incident-lab/invocations"".')",1,2026-10-05T08:55:21Z,2026-10-05T08:55:21Z

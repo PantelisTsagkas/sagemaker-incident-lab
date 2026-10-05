@@ -64,8 +64,9 @@ should pass, so the test suite confirmed the bug instead of catching it.
 - Rewrote the test first: it now expects 1.9.1 against 1.9.0 to fail. It failed against the
   old guard and passes against the new one.
 
-**Verification: pending.** On the next deploy, the logs should show `model_load` with no
-`InconsistentVersionWarning`.
+**Verified 2026-10-05.** On the next deploy, both workers logged `model_load` with no
+`InconsistentVersionWarning`. A search of the endpoint logs for that warning over the whole
+session returned zero matches.
 
 ## Prevention
 - The tightened test stops a looser version check from coming back unnoticed.
