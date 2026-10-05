@@ -66,8 +66,8 @@ Both are reported in **microseconds**.
 
 | # | Incident | Status |
 |---|----------|--------|
-| 0 | Baseline under load (Locust) | todo |
-| 1 | Slow preprocessing | todo |
+| 0 | Baseline under load (Locust) | done: [BASELINE](docs/BASELINE.md) |
+| 1 | Slow preprocessing | done: [INC-001](docs/incidents/INC-001-slow-preprocessing.md) |
 | 2 | Undersized instance | todo |
 | 3 | Traffic spike and autoscaling lag | todo |
 | 4 | Cold start (serverless variant) | todo |

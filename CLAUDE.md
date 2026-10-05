@@ -7,7 +7,7 @@ The model (a Kepler exoplanet classifier on the NASA KOI catalogue) is the patie
 
 Current state
 
-First deploy verified end to end on 2026-10-02 (InService in about 3 minutes, smoke test correct). 11 Pytest tests pass. Infra (artifacts bucket, least-privilege execution role, budget alert) lives in infra/ as Terraform; get env vars with `terraform -chdir=infra output -raw role_arn` and `bucket_name`. INC-000 (sklearn version mismatch) is written up in docs/incidents/. Incident 0 baseline done 2026-10-05 (docs/BASELINE.md, results/baseline_*.csv). Next: Incident 1. Note INC-000 is the version mismatch, so roadmap incident N gets file INC-00N.
+First deploy verified end to end on 2026-10-02 (InService in about 3 minutes, smoke test correct). 12 Pytest tests pass. Infra (artifacts bucket, least-privilege execution role, budget alert) lives in infra/ as Terraform; get env vars with `terraform -chdir=infra output -raw role_arn` and `bucket_name`. INC-000 (sklearn version mismatch) is written up in docs/incidents/. Incident 0 baseline done 2026-10-05 (docs/BASELINE.md, results/baseline_*.csv). Incident 1 done 2026-10-05 (docs/incidents/INC-001-slow-preprocessing.md, results/inc001_*.csv); Locust takes BATCH_SIZE (default 1), INC-001 used 50. Next: Incident 2. Note INC-000 is the version mismatch, so roadmap incident N gets file INC-00N.
 
 src/incident_lab/
   config.py     env-driven Settings, paths, SKLEARN_CONTAINER_VERSION (image tag), SKLEARN_SERVING_VERSION (sklearn inside it)
@@ -45,7 +45,7 @@ Resolved: output_fn returning a (body, content_type) tuple works in the 1.9-0 co
 Resolved: the NASA TAP download URL and column names work.
 Resolved 2026-10-05: InconsistentVersionWarning is gone; INC-000 verified.
 Open: what HTTP status the container returns when input_fn raises ValueError (answer during Incident 6).
-Open: the update_endpoint path in deploy.py and check_update_landed have not run against AWS yet (first FAULT change will exercise them).
+Resolved 2026-10-05: the update_endpoint path and check_update_landed work against AWS. A rolling update starts a second instance, both serve for about 13 s, no failed requests.
 Observed on first deploy: two gunicorn workers on ml.m5.large, each loads its own model copy (model_load about 2.3 s); the model loads on the first ping, not at container start; first invoke took 1,323 ms client-side vs 84 ms in the container. Confirmed 2026-10-05 as per-process client setup (about 1.1 s); see docs/BASELINE.md.
 Caveat for all incidents: about 5% of stage_timing lines are lost to Logs Insights because CloudWatch sometimes groups several stdout lines into one event and only the first JSON object is parsed. Percentiles are fine, per-stage counts are not request counts.
 Roadmap
