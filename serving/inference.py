@@ -42,7 +42,7 @@ JSON_CONTENT_TYPE = "application/json"
 # Fault injection switch. Each incident adds one behaviour here, toggled by the
 # FAULT environment variable on the SageMaker Model. "none" means healthy.
 FAULT = os.environ.get("FAULT", "none")
-KNOWN_FAULTS = {"none"}
+KNOWN_FAULTS = {"none", "slow_preprocess"}
 
 
 def log_event(event: str, **fields: Any) -> None:
@@ -80,8 +80,22 @@ def input_fn(request_body: str | bytes, request_content_type: str) -> pd.DataFra
         if missing:
             raise ValueError(f"Missing features: {missing}")
 
+        if FAULT == "slow_preprocess":
+            return rows_to_frame_one_by_one(instances)
         # Explicit column order: the model was trained on exactly this order.
         return pd.DataFrame(instances, columns=FEATURES).astype("float64")
+
+
+def rows_to_frame_one_by_one(instances: list[dict[str, Any]]) -> pd.DataFrame:
+    """INC-001 fault: grow the DataFrame one row at a time.
+
+    Same result as the vectorised path, but every .loc append makes pandas reallocate
+    and re-check the frame, so the cost grows with batch size. Invisible at one row.
+    """
+    frame = pd.DataFrame(columns=FEATURES)
+    for row in instances:
+        frame.loc[len(frame)] = [row[f] for f in FEATURES]
+    return frame.astype("float64")
 
 
 def predict_fn(input_data: pd.DataFrame, model: Any) -> list[float]:

@@ -2,9 +2,12 @@
 
 Uses boto3 instead of HttpUser because the endpoint needs SigV4-signed requests.
 Each request is reported to Locust manually via events.request.
+
+BATCH_SIZE (env var, default 1) sets the rows per request. The baseline used 1.
 """
 
 import json
+import os
 import time
 
 import boto3
@@ -16,6 +19,7 @@ from incident_lab.config import REFERENCE_FILE, load_endpoint_name, load_region
 from incident_lab.invoke import build_payload
 
 REFERENCE = pd.read_csv(REFERENCE_FILE)
+BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "1"))
 # No retries: a throttled or failed request must show as an error, not a slow success.
 NO_RETRIES = Config(retries={"total_max_attempts": 1})
 
@@ -30,8 +34,8 @@ class SageMakerUser(User):
         self.endpoint_name = load_endpoint_name()
 
     @task
-    def predict_one_row(self) -> None:
-        body = json.dumps(build_payload(REFERENCE.sample(1)))
+    def predict(self) -> None:
+        body = json.dumps(build_payload(REFERENCE.sample(BATCH_SIZE)))
         start = time.perf_counter()
         exception: Exception | None = None
         response_length = 0

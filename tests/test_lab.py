@@ -207,3 +207,21 @@ def test_teardown_needs_only_region_and_sweeps_everything(
     with stubber:
         teardown.main()
     stubber.assert_no_pending_responses()
+
+
+def test_slow_preprocess_returns_same_frame_as_healthy(
+    trained: tuple[Path, pd.DataFrame], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The INC-001 fault must change only the speed, never the model input."""
+    _, reference = trained
+    rows = reference.head(5).copy()
+    rows.loc[rows.index[1], "koi_depth"] = np.nan  # nulls must survive both paths
+    body = json.dumps(build_payload(rows))
+    inference = load_inference_module()
+
+    healthy = inference.input_fn(body, "application/json")
+    monkeypatch.setattr(inference, "FAULT", "slow_preprocess")
+    slow = inference.input_fn(body, "application/json")
+
+    pd.testing.assert_frame_equal(slow, healthy)
+    assert slow["koi_depth"].isna().sum() == 1
