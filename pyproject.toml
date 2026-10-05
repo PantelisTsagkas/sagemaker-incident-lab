@@ -18,6 +18,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "locust>=2.46.7",
     "pytest>=8",
     "ruff>=0.6",
 ]
