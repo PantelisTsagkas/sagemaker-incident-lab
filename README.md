@@ -68,7 +68,7 @@ Both are reported in **microseconds**.
 |---|----------|--------|
 | 0 | Baseline under load (Locust) | done: [BASELINE](docs/BASELINE.md) |
 | 1 | Slow preprocessing | done: [INC-001](docs/incidents/INC-001-slow-preprocessing.md) |
-| 2 | Undersized instance | todo |
+| 2 | Undersized instance | done: [INC-002](docs/incidents/INC-002-undersized-instance.md) |
 | 3 | Traffic spike and autoscaling lag | todo |
 | 4 | Cold start (serverless variant) | todo |
 | 5 | Memory leak | todo |
