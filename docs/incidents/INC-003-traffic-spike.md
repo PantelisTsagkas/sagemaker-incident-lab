@@ -46,7 +46,15 @@ uv run locust -f load/ramp.py --headless --processes 4 --csv results/inc003_ramp
 | 360 | 207 | 42% | 157% |
 | 400 | 200 | 50% | 157% |
 
-So one m5.large serves about **200 requests per second**, and rejections start at about 160.
+So one m5.large serves about **200 requests per second**. Run A and the 1-instance part of Run B
+both reproduced this (200 to 206 served).
+
+**The onset at 160 is less certain.** The staircase started 30 seconds after the endpoint went
+InService, and its lower steps ran slower than they should have (see Anomalies). In Run B, two
+instances took about 160 per second each for two minutes with CPU about 101% each, ModelLatency
+p50 15 to 18 ms and 10 failures out of about 38,000 requests. In the staircase the same rate gave
+CPU 127 to 131%, ModelLatency p50 88 to 202 ms and 2.3% failures. So the CPU and failure figures
+for the 120 and 160 steps are probably too high. Rejections start somewhere between 160 and 200.
 Above the limit, served traffic stays flat and every extra request is rejected. Almost all
 failures (69,631 of 69,675) were `ThrottlingException`.
 
@@ -179,21 +187,29 @@ A spike above that limit gets rejected at SageMaker's front door. With no autosc
 no way to add capacity, so the rejections lasted as long as the spike.
 
 **The scale-out happened in two rounds, as predicted before the run.** Target tracking works out
-how many instances it needs from the metric: current instances x metric / target. The metric
-counts requests the instances *served*, not requests clients *sent*. A full instance serves its
-200 per second and the rest are rejected and never counted. So AWS saw 12,000 per minute against
-a target of 6,000 and asked for 2 instances, when the real 320 per second needed 3 at the target.
-Only once 2 instances were serving could the metric show the real demand. This time it did not
-make the outage longer, because 2 instances were already enough to stop the rejections. With a
-bigger spike, the first round would not have been enough, and every extra round adds another
-2 to 3 minutes of failures.
+how many instances it needs from the metric: roughly current instances x metric / target. The
+metric counts requests the instances *served*, not requests clients *sent*. A full instance serves
+its 200 per second and the rest are rejected and never counted. So AWS saw about 12,000 per minute
+against a target of 6,000 and asked for 2 instances, when the real 320 per second needed 3 at the
+target. The first round was sized from a number that the saturation itself had capped.
+
+The second round started at 10:00:36, only 5 seconds after the second instance went into service
+at 10:00:31. No full minute of data from 2 serving instances existed yet. The alarm was still in
+ALARM on the 1-instance minutes, so the most likely calculation is the new capacity (2) times the
+same capped per-instance figure (about 11,000 to 12,000 per minute) divided by 6,000: 3.7 to 4,
+capped at the maximum of 3. AWS does not publish the calculation, so this is inferred from the
+timestamps, not shown by them. Either way, the cap of 3 hid any overshoot.
+
+This time the two rounds did not make the outage longer, because 2 instances were already enough
+to stop the rejections. With a bigger spike, the first round would not have been enough, and each
+extra round adds another 2 to 3 minutes of failures.
 
 **The scale-out cooldown did not delay the second round.** The second activity started 5 seconds
 after the first finished, even though the scale-out cooldown was 300 seconds. That matches the
 Application Auto Scaling docs: during a scale-out cooldown the policy will not scale out again
 "unless a larger scale out is triggered", and the capacity just added counts towards the next
-calculation. Two instances serving 320 per second worked out to 3.2 instances needed (capped at
-3), which was larger, so it went ahead.
+calculation. The alarm was still firing and the calculation asked for more than 2, so it went
+ahead.
 
 ## Fix
 Target-tracking autoscaling, 1 to 3 instances, target 100 requests per second per instance.
@@ -209,8 +225,9 @@ that was about 8 minutes.
 per second, ModelLatency p50 was 52 to 94 ms. Later, in Run A and Run B, the same 80 per second
 ran at 10 to 12 ms, and in INC-002 at 10 to 13 ms. Predict stayed at about 7 ms the whole time,
 so requests were waiting, not working. The staircase started 30 seconds after the endpoint went
-InService. A new instance warming up is the likely cause, but this was not proven. Recorded,
-not chased.
+InService. The cause is unknown. A brand new instance warming up would fit, but the new instances
+added in Run B did not visibly slow the endpoint down, so that is not shown. This also affects the
+staircase's lower steps (see Step 1). Recorded, not chased.
 
 **Scale-in was slow and only one step.** It took 18 minutes from the end of the spike to remove
 the first instance (15 quiet minutes for AlarmLow, then about 2 minutes). Then it removed only
