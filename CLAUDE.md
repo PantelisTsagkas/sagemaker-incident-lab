@@ -7,7 +7,7 @@ The model (a Kepler exoplanet classifier on the NASA KOI catalogue) is the patie
 
 Current state
 
-First deploy verified end to end on 2026-10-02 (InService in about 3 minutes, smoke test correct). 12 Pytest tests pass. Infra (artifacts bucket, least-privilege execution role, budget alert) lives in infra/ as Terraform; get env vars with `terraform -chdir=infra output -raw role_arn` and `bucket_name`. INC-000 (sklearn version mismatch) is written up in docs/incidents/. Incident 0 baseline done 2026-10-05 (docs/BASELINE.md, results/baseline_*.csv). Incident 1 done 2026-10-05 (docs/incidents/INC-001-slow-preprocessing.md, results/inc001_*.csv); Locust takes BATCH_SIZE (default 1), INC-001 used 50. Incident 2 done 2026-10-05 (docs/incidents/INC-002-undersized-instance.md, results/inc002_t2_u40_*.csv): ml.t2.medium saturated at 80 req/s (40 users), m5.large ran it at about 51% CPU; endpoint 4XX/5XX metrics missed 1,701 client ThrottlingExceptions. Next: Incident 3. Note INC-000 is the version mismatch, so roadmap incident N gets file INC-00N.
+First deploy verified end to end on 2026-10-02 (InService in about 3 minutes, smoke test correct). 13 Pytest tests pass. Infra (artifacts bucket, least-privilege execution role, budget alert) lives in infra/ as Terraform; get env vars with `terraform -chdir=infra output -raw role_arn` and `bucket_name`. INC-000 (sklearn version mismatch) is written up in docs/incidents/. Incident 0 baseline done 2026-10-05 (docs/BASELINE.md, results/baseline_*.csv). Incident 1 done 2026-10-05 (docs/incidents/INC-001-slow-preprocessing.md, results/inc001_*.csv); Locust takes BATCH_SIZE (default 1), INC-001 used 50. Incident 2 done 2026-10-05 (docs/incidents/INC-002-undersized-instance.md, results/inc002_t2_u40_*.csv): ml.t2.medium saturated at 80 req/s (40 users), m5.large ran it at about 51% CPU; endpoint 4XX/5XX metrics missed 1,701 client ThrottlingExceptions. Incident 3 done 2026-10-11 (docs/incidents/INC-003-traffic-spike.md, results/inc003_*): one m5.large serves about 200 req/s (throttling from about 160, CPU levels off at 157%); spike 80 to 320 req/s failed about 35% with no scaling; target tracking (1 to 3 instances, 100 req/s per instance) still failed for 7 min 55 s, about 5 min of it detection; scale-out came in two rounds because InvocationsPerInstance counts served, not offered, requests. Next: Incident 4 (cold start, serverless). Note INC-000 is the version mismatch, so roadmap incident N gets file INC-00N.
 
 src/incident_lab/
   config.py     env-driven Settings, paths, SKLEARN_CONTAINER_VERSION (image tag), SKLEARN_SERVING_VERSION (sklearn inside it)
@@ -16,7 +16,10 @@ src/incident_lab/
   package.py    builds model.tar.gz (model.joblib + code/inference.py)
   deploy.py     uploads to S3, creates Model, EndpointConfig, Endpoint (or updates existing)
   invoke.py     boto3 smoke test with client-side timing
-  teardown.py   deletes endpoint and sweeps all lab models and endpoint configs
+  teardown.py   deregisters lab autoscaling targets, deletes endpoint, sweeps all lab models and endpoint configs
+  autoscale.py  `apply` (SCALE_TARGET_RPS, SCALE_MAX_INSTANCES) registers target tracking on the live endpoint; `status` prints instance counts and scaling activities in UTC
+  metrics.py    saves per-minute CloudWatch endpoint metrics to CSV: `metrics HH:MM HH:MM out.csv` (UTC, today)
+load/locustfile.py  SigV4 boto3 Locust user (baseline, -u/-r/-t); load/ramp.py staircase and load/spike.py spike shapes, run with --processes 4
 serving/inference.py   container handlers: model_fn, input_fn, predict_fn, output_fn
 tests/test_lab.py
 docs/incidents/TEMPLATE.md
@@ -45,6 +48,8 @@ Resolved: output_fn returning a (body, content_type) tuple works in the 1.9-0 co
 Resolved: the NASA TAP download URL and column names work.
 Resolved 2026-10-05: InconsistentVersionWarning is gone; INC-000 verified.
 Open: what HTTP status the container returns when input_fn raises ValueError (answer during Incident 6).
+Open (INC-003): what caps one instance at about 200 req/s while CPU sits at 157% of 200%; ConcurrentRequestsPerModel peaked near 100.
+Autoscaling caveat: do not run deploy while a scalable target is registered (instance type change fails, a new config resets the count to 1). Teardown deregisters it.
 Resolved 2026-10-05: the update_endpoint path and check_update_landed work against AWS. A rolling update starts a second instance, both serve for about 13 s, no failed requests.
 Observed on first deploy: two gunicorn workers on ml.m5.large (gevent worker class, confirmed 2026-10-05: many connections per worker, but CPU-bound predicts run one at a time per process), each loads its own model copy (model_load about 2.3 s); the model loads on the first ping, not at container start; first invoke took 1,323 ms client-side vs 84 ms in the container. Confirmed 2026-10-05 as per-process client setup (about 1.1 s); see docs/BASELINE.md.
 Caveat for all incidents: about 5% of stage_timing lines are lost to Logs Insights because CloudWatch sometimes groups several stdout lines into one event and only the first JSON object is parsed. Percentiles are fine, per-stage counts are not request counts.

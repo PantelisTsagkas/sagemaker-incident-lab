@@ -1,0 +1,7 @@
+Instances: 2 running, 2 wanted
+09:57:36 to 10:00:31 UTC Successful: Setting desired instance count to 2.
+    cause: monitor alarm TargetTracking-endpoint/incident-lab/variant/AllTraffic-AlarmHigh-796f3cb4-6e87-4f76-aa0e-ef1cc8a142bc in state ALARM triggered policy incident-lab-invocations-per-instance
+10:00:36 to 10:03:21 UTC Successful: Setting desired instance count to 3.
+    cause: monitor alarm TargetTracking-endpoint/incident-lab/variant/AllTraffic-AlarmHigh-796f3cb4-6e87-4f76-aa0e-ef1cc8a142bc in state ALARM triggered policy incident-lab-invocations-per-instance
+10:30:55 to 10:31:25 UTC Successful: Setting desired instance count to 2.
+    cause: monitor alarm TargetTracking-endpoint/incident-lab/variant/AllTraffic-AlarmLow-3d87c5ac-ea67-4158-b4bb-fa3a471b784b in state ALARM triggered policy incident-lab-invocations-per-instance

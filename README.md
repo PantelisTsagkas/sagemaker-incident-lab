@@ -30,9 +30,23 @@ uv run python -m incident_lab.train      # downloads KOI data, trains, writes ar
 uv run python -m incident_lab.package    # builds artifacts/model.tar.gz
 uv run python -m incident_lab.deploy     # 5 to 10 minutes; endpoint starts billing
 uv run python -m incident_lab.invoke     # smoke test
-uv run python -m incident_lab.teardown   # ALWAYS, at the end of every session
+uv run python -m incident_lab.teardown   # ALWAYS, at the end of every session (also removes autoscaling)
 uv run pytest
 ```
+
+## Load tests and autoscaling
+
+```bash
+uv run locust -f load/locustfile.py --headless -u 10 -r 2 -t 10m --csv results/baseline
+uv run locust -f load/ramp.py  --headless --processes 4 --csv results/<name>   # staircase, finds one instance's limit
+uv run locust -f load/spike.py --headless --processes 4 --csv results/<name>   # steady, sudden jump, steady
+SCALE_TARGET_RPS=100 SCALE_MAX_INSTANCES=3 uv run python -m incident_lab.autoscale apply
+uv run python -m incident_lab.autoscale status
+uv run python -m incident_lab.metrics 09:13 09:32 results/<name>_cloudwatch.csv   # UTC
+```
+
+Each Locust user sends up to 2 requests per second. The autoscaling target is per second per
+instance and is converted to the per-minute value the metric uses.
 
 ## Where the time goes
 
@@ -69,7 +83,7 @@ Both are reported in **microseconds**.
 | 0 | Baseline under load (Locust) | done: [BASELINE](docs/BASELINE.md) |
 | 1 | Slow preprocessing | done: [INC-001](docs/incidents/INC-001-slow-preprocessing.md) |
 | 2 | Undersized instance | done: [INC-002](docs/incidents/INC-002-undersized-instance.md) |
-| 3 | Traffic spike and autoscaling lag | todo |
+| 3 | Traffic spike and autoscaling lag | done: [INC-003](docs/incidents/INC-003-traffic-spike.md) |
 | 4 | Cold start (serverless variant) | todo |
 | 5 | Memory leak | todo |
 | 6 | Schema break | todo |

@@ -1,0 +1,16 @@
+Target-tracking alarms created by Application Auto Scaling (captured 2026-10-11 before teardown deleted them)
+
+AlarmHigh: InvocationsPerInstance Sum, period 60 s, 3 of 3 datapoints > 6000
+AlarmLow:  InvocationsPerInstance Sum, period 60 s, 15 of 15 datapoints < 5400 (90% of target)
+
+Alarm state history (UTC):
+09:50:36  AlarmHigh  INSUFFICIENT_DATA -> OK
+09:50:54  AlarmLow   INSUFFICIENT_DATA -> OK
+09:57:36  AlarmHigh  OK -> ALARM
+10:14:36  AlarmHigh  ALARM -> OK
+10:28:54  AlarmLow   OK -> ALARM
+
+First model_load per instance (stage_timing logs; the model loads on the first ping, so this is when the instance became able to serve):
+i-0fee01fc09659e8f2  original instance (deployed 09:12)
+i-09c8e5b978452b544  09:59:46 (2,341 ms and 2,298 ms, one per worker)
+i-003278ca20b17ca26  10:02:56 (3,929 ms and 3,069 ms)
