@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 from botocore.stub import Stubber
 
-from incident_lab import teardown
+from incident_lab import autoscale, teardown
 from incident_lab.config import SERVING_DIR
 from incident_lab.data import FEATURES, prepare
 from incident_lab.deploy import check_update_landed, container_environment, version_suffix
@@ -139,7 +139,8 @@ def test_check_update_landed_catches_rollback() -> None:
 def test_teardown_needs_only_region_and_sweeps_everything(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Teardown must work in a fresh shell and catch endpoints beyond ENDPOINT_NAME."""
+    """Teardown must work in a fresh shell, catch endpoints beyond ENDPOINT_NAME, and remove
+    only this lab's autoscaling targets."""
     for name in ("SAGEMAKER_ROLE_ARN", "INCIDENT_LAB_BUCKET", "ENDPOINT_NAME"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("AWS_REGION", "eu-west-2")
@@ -151,6 +152,13 @@ def test_teardown_needs_only_region_and_sweeps_everything(
         aws_secret_access_key="test",
     )
     stubber = Stubber(client)
+    autoscaling = boto3.client(
+        "application-autoscaling",
+        region_name="eu-west-2",
+        aws_access_key_id="test",
+        aws_secret_access_key="test",
+    )
+    autoscaling_stubber = Stubber(autoscaling)
     lab = {"NameContains": "incident-lab"}
     gone = {"service_error_code": "ValidationException", "service_message": "not found"}
     stamp = datetime(2026, 10, 1, tzinfo=UTC)
@@ -163,6 +171,43 @@ def test_teardown_needs_only_region_and_sweeps_everything(
             "LastModifiedTime": stamp,
             "EndpointStatus": "InService",
         }
+
+    def scalable_target(resource_id: str) -> dict[str, object]:
+        return {
+            "ServiceNamespace": "sagemaker",
+            "ResourceId": resource_id,
+            "ScalableDimension": "sagemaker:variant:DesiredInstanceCount",
+            "MinCapacity": 1,
+            "MaxCapacity": 3,
+            "RoleARN": "arn:aws:iam::123456789012:role/aws-service-role/x",
+            "CreationTime": stamp,
+        }
+
+    in_sagemaker = {"ServiceNamespace": "sagemaker"}
+    autoscaling_stubber.add_response(
+        "describe_scalable_targets",
+        {
+            "ScalableTargets": [
+                scalable_target("endpoint/incident-lab/variant/AllTraffic"),
+                scalable_target("endpoint/someone-else/variant/AllTraffic"),
+            ]
+        },
+        in_sagemaker,
+    )
+    autoscaling_stubber.add_response(
+        "deregister_scalable_target",
+        {},
+        {
+            "ServiceNamespace": "sagemaker",
+            "ResourceId": "endpoint/incident-lab/variant/AllTraffic",
+            "ScalableDimension": "sagemaker:variant:DesiredInstanceCount",
+        },
+    )
+    autoscaling_stubber.add_response(
+        "describe_scalable_targets",
+        {"ScalableTargets": [scalable_target("endpoint/someone-else/variant/AllTraffic")]},
+        in_sagemaker,
+    )
 
     stubber.add_response(
         "list_endpoints",
@@ -203,10 +248,12 @@ def test_teardown_needs_only_region_and_sweeps_everything(
     stubber.add_response("delete_model", {}, {"ModelName": "incident-lab-1"})
     stubber.add_response("list_endpoints", {"Endpoints": []}, lab)
 
-    monkeypatch.setattr(teardown.boto3, "client", lambda *args, **kwargs: client)
-    with stubber:
+    clients = {"sagemaker": client, "application-autoscaling": autoscaling}
+    monkeypatch.setattr(teardown.boto3, "client", lambda service, **kwargs: clients[service])
+    with stubber, autoscaling_stubber:
         teardown.main()
     stubber.assert_no_pending_responses()
+    autoscaling_stubber.assert_no_pending_responses()
 
 
 def test_slow_preprocess_returns_same_frame_as_healthy(
@@ -225,3 +272,42 @@ def test_slow_preprocess_returns_same_frame_as_healthy(
 
     pd.testing.assert_frame_equal(slow, healthy)
     assert slow["koi_depth"].isna().sum() == 1
+
+
+def test_autoscale_target_is_per_minute_and_capped() -> None:
+    """The metric counts invocations per minute; a per-second target would never scale out."""
+    autoscaling = boto3.client(
+        "application-autoscaling",
+        region_name="eu-west-2",
+        aws_access_key_id="test",
+        aws_secret_access_key="test",
+    )
+    stubber = Stubber(autoscaling)
+    target = {
+        "ServiceNamespace": "sagemaker",
+        "ResourceId": "endpoint/incident-lab/variant/AllTraffic",
+        "ScalableDimension": "sagemaker:variant:DesiredInstanceCount",
+    }
+    stubber.add_response(
+        "register_scalable_target", {}, {**target, "MinCapacity": 1, "MaxCapacity": 3}
+    )
+    stubber.add_response(
+        "put_scaling_policy",
+        {"PolicyARN": "arn:aws:autoscaling:eu-west-2:1:scalingPolicy:x"},
+        {
+            **target,
+            "PolicyName": "incident-lab-invocations-per-instance",
+            "PolicyType": "TargetTrackingScaling",
+            "TargetTrackingScalingPolicyConfiguration": {
+                "TargetValue": 7200.0,
+                "PredefinedMetricSpecification": {
+                    "PredefinedMetricType": "SageMakerVariantInvocationsPerInstance"
+                },
+                "ScaleOutCooldown": 300,
+                "ScaleInCooldown": 300,
+            },
+        },
+    )
+    with stubber:
+        autoscale.apply(autoscaling, "incident-lab", target_rps=120, max_instances=3)
+    stubber.assert_no_pending_responses()

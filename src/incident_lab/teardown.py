@@ -5,6 +5,10 @@ forgotten endpoint bills every hour) depends on the most stable API there is.
 It needs only AWS_REGION, so it works in a fresh shell. It sweeps by name,
 not just the current ENDPOINT_NAME, so leftovers from half-failed deploys and
 one-off variants (serverless, overrides) are caught too.
+
+Autoscaling registrations are removed first. AWS says to deregister a scalable
+target before deleting its endpoint, and a leftover registration would attach
+itself to the next endpoint created with the same name.
 """
 
 import boto3
@@ -32,6 +36,30 @@ def endpoints_to_delete(client: BaseClient, configured_name: str) -> list[str]:
     return names
 
 
+def lab_scalable_targets(autoscaling: BaseClient) -> list[dict[str, str]]:
+    paginator = autoscaling.get_paginator("describe_scalable_targets")
+    targets: list[dict[str, str]] = []
+    for page in paginator.paginate(ServiceNamespace="sagemaker"):
+        targets.extend(
+            target for target in page["ScalableTargets"] if PROJECT in target["ResourceId"]
+        )
+    return targets
+
+
+def deregister_scalable_targets(autoscaling: BaseClient) -> list[str]:
+    """Deregistering a target also deletes its scaling policies (Application Auto Scaling docs)."""
+    deregistered: list[str] = []
+    for target in lab_scalable_targets(autoscaling):
+        autoscaling.deregister_scalable_target(
+            ServiceNamespace=target["ServiceNamespace"],
+            ResourceId=target["ResourceId"],
+            ScalableDimension=target["ScalableDimension"],
+        )
+        print(f"Deregistered autoscaling target {target['ResourceId']}")
+        deregistered.append(target["ResourceId"])
+    return deregistered
+
+
 def delete_endpoint(client: BaseClient, endpoint_name: str) -> bool:
     """Returns True if a delete was issued, False if there was nothing to delete."""
     try:
@@ -47,6 +75,9 @@ def delete_endpoint(client: BaseClient, endpoint_name: str) -> bool:
 def main() -> None:
     region = load_region()
     client = boto3.client("sagemaker", region_name=region)
+    autoscaling = boto3.client("application-autoscaling", region_name=region)
+
+    deregister_scalable_targets(autoscaling)
 
     deleted = [
         name
@@ -73,7 +104,12 @@ def main() -> None:
     remaining = lab_resource_names(client, "list_endpoints", "Endpoints", "EndpointName")
     if remaining:
         raise RuntimeError(f"Endpoints still present in {region}: {remaining}. Check the console.")
-    print(f"Verified: no {PROJECT} endpoints left in {region}. Nothing is billing.")
+    leftover_targets = [target["ResourceId"] for target in lab_scalable_targets(autoscaling)]
+    if leftover_targets:
+        raise RuntimeError(f"Autoscaling targets still registered in {region}: {leftover_targets}.")
+    print(
+        f"Verified: no {PROJECT} endpoints or autoscaling targets left in {region}. Nothing is billing."
+    )
 
 
 if __name__ == "__main__":
