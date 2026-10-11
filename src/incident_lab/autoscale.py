@@ -20,6 +20,7 @@ The policy tracks SageMakerVariantInvocationsPerInstance. Two things about that 
 
 import os
 import sys
+from datetime import UTC
 
 import boto3
 from botocore.client import BaseClient
@@ -87,9 +88,11 @@ def status(autoscaling: BaseClient, sagemaker: BaseClient, endpoint_name: str) -
         ServiceNamespace="sagemaker", ResourceId=resource_id(endpoint_name)
     )["ScalingActivities"]
     for activity in reversed(activities):  # oldest first
+        start = activity["StartTime"].astimezone(UTC)
         end = activity.get("EndTime")
+        end_text = f"{end.astimezone(UTC):%H:%M:%S}" if end else "running"
         print(
-            f"{activity['StartTime']:%H:%M:%S} to {f'{end:%H:%M:%S}' if end else 'running'} "
+            f"{start:%H:%M:%S} to {end_text} UTC "
             f"{activity['StatusCode']}: {activity['Description']}"
         )
         print(f"    cause: {activity['Cause']}")
